@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>AI Trip Planner</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary-color: #FF385C;
+            --secondary-color: #00A699;
+            --text-color: #333;
+            --text-light-color: #6B7280;
+            --background-color: #F7F7F7;
+            --border-color: #E5E7EB;
+            --sidebar-width: 420px;
+            --border-radius: 12px;
+            --shadow: 0 4px 12px rgba(0,0,0,0.1);
+
+            /* Mobile drawer heights */
+            --drawer-peek-height: 80px;
+            --drawer-half-height: 52vh;
+            --drawer-full-offset: 15px;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            position: fixed;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+        }
+
+        #app { display: flex; width: 100%; height: 100%; }
+        #map { flex-grow: 1; height: 100%; }
+
+        #sidebar {
+            width: var(--sidebar-width);
+            height: 100%;
+            background-color: white;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+        }
+
+        .sidebar-header { padding: 24px; border-bottom: 1px solid var(--border-color); }
+        .title { font-size: 28px; font-weight: 700; margin: 0; }
+        .subtitle { font-size: 16px; color: var(--text-light-color); margin: 4px 0 0; }
+
+        .tabs-container {
+            display: flex;
+            overflow-x: auto;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--border-color);
+            scrollbar-width: none;
+        }
+        .tabs-container::-webkit-scrollbar { display: none; }
+
+        .tab {
+            padding: 10px 20px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            margin-right: 10px;
+        }
+        .tab:hover { background-color: #f0f0f0; }
+        .tab.active { background-color: var(--primary-color); color: white; font-weight: 600; }
+        .tab-date { font-size: 12px; opacity: 0.8; }
+
+        .itinerary-container { flex-grow: 1; overflow-y: auto; padding: 0 8px 24px 24px; }
+        .day-info { padding-top: 24px; }
+        .day-theme { font-size: 24px; font-weight: 700; margin-bottom: 16px; padding-right: 16px; }
+
+        .day-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px; padding: 16px; background-color: #F9FAFB;
+            border-radius: var(--border-radius); margin-bottom: 24px; margin-right: 16px;
+        }
+        .summary-item { display: flex; flex-direction: column; }
+        .summary-item .label { font-size: 13px; color: var(--text-light-color); margin-bottom: 4px; }
+        .summary-item .value { font-size: 16px; font-weight: 600; color: var(--text-color); }
+        .summary-item .sub-value { font-size: 12px; color: var(--text-light-color); }
+
+        .timeline { list-style: none; padding: 0; margin: 0; padding-right: 16px; }
+        .transit-leg {
+            display: flex; align-items: center; padding-left: 20px;
+            margin-left: 18px; border-left: 2px dotted var(--border-color);
+            padding-bottom: 16px; padding-top: 8px;
+        }
+        .transit-details { font-size: 14px; color: var(--text-light-color); }
+        .transit-details .mode-icon { margin-right: 8px; font-size: 16px; }
+        .transit-details strong { color: var(--text-color); font-weight: 500;}
+
+        .activity-card { display: flex; gap: 16px; margin-bottom: 8px; }
+        .activity-icon {
+            width: 40px; height: 40px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 700; color: white;
+            flex-shrink: 0; z-index: 2; position: relative; background: white;
+        }
+         .activity-icon div {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .activity-content {
+            flex-grow: 1; padding: 12px; border-radius: var(--border-radius);
+            border: 1px solid var(--border-color); cursor: pointer;
+            transition: all 0.2s; margin-top: -5px; margin-bottom: 10px;
+        }
+        .activity-content:hover { border-color: var(--primary-color); box-shadow: var(--shadow); }
+
+        .activity-header { display: flex; justify-content: space-between; align-items: center; }
+        .activity-name { font-size: 17px; font-weight: 600; }
+        .activity-time { font-size: 13px; color: var(--text-light-color); font-weight: 500; }
+        .activity-type { font-size: 13px; font-weight: 500; margin-top: 4px; }
+
+        .activity-details-toggle {
+            font-size: 13px; font-weight: 600; color: var(--primary-color);
+            cursor: pointer; margin-top: 12px; display: inline-block;
+        }
+        .activity-details-collapsible {
+            display: none; margin-top: 12px; font-size: 14px;
+            color: var(--text-light-color); border-top: 1px solid var(--border-color); padding-top: 12px;
+        }
+        .activity-details-collapsible p { margin: 0 0 10px; line-height: 1.5;}
+        .detail-item { margin-bottom: 8px; }
+        .detail-item strong { color: var(--text-color); font-weight: 500; }
+        .detail-item a { color: var(--secondary-color); text-decoration: none; }
+        .detail-item a:hover { text-decoration: underline; }
+
+        .legend-container { padding: 24px; border-top: 1px solid var(--border-color); }
+        .legend-container h3 { margin: 0 0 12px; font-size: 18px; }
+        .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+        .stop-marker, .lodging-marker {
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-size: 14px;
+            border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .lodging-marker { font-size: 18px; }
+        .lodging-marker::before { content: '🏠'; }
+        .mobile-drawer-header { display: none; }
+
+        /* --- MOBILE STYLES --- */
+        @media (max-width: 768px) {
+            #app { flex-direction: column-reverse; }
+            #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+
+            #sidebar {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                height: calc(100% - var(--drawer-full-offset));
+                z-index: 1000;
+                border-top-left-radius: 20px;
+                border-top-right-radius: 20px;
+                box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+                transform: translateY(calc(100vh - var(--drawer-half-height)));
+                transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+            }
+            #sidebar.is-dragging { transition: none; }
+
+            .sidebar-header { display: none; }
+            .mobile-drawer-header {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 8px 16px 12px;
+                cursor: grab;
+                touch-action: none;
+                flex-shrink: 0;
+                border-bottom: 1px solid var(--border-color);
+            }
+            .mobile-drawer-handle { width: 40px; height: 5px; background-color: #ccc; border-radius: 2.5px; margin-bottom: 8px; }
+            .day-theme-mobile { font-size: 18px; font-weight: 600; }
+            
+            #tabs { flex-shrink: 0; }
+            #itinerary {
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch; /* Smooth scrolling for iOS */
+            }
+            .day-theme { display: none; }
+            .day-summary-grid, .timeline { padding-right: 0; margin-right: 0; }
+            .legend-container { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="map"></div>
+        <div id="sidebar">
+            <div class="mobile-drawer-header">
+                <div class="mobile-drawer-handle"></div>
+                <div class="day-theme-mobile"></div>
+            </div>
+            <div class="sidebar-header">
+                <h1 class="title">NYC Adventure</h1>
+                <p class="subtitle">Aug 28 - Sep 2, 2025 • 6 days</p>
+            </div>
+            <div id="tabs" class="tabs-container"></div>
+            <div id="itinerary" class="itinerary-container"></div>
+            <div class="legend-container">
+                <h3 class="legend-title">Legend</h3>
+                <div id="legend" class="legend"></div>
+            </div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Data and Colors (no changes)
+        const TYPE_COLORS = { sightseeing: "#FF385C", museum: "#E31C5F", park: "#00A699", neighborhood: "#8B5CF6", view: "#F59E0B", memorial: "#06B6D4", market: "#F97316", shopping: "#64748B", other: "#374151", lodging: "#FF5A5F", food: "#10B981", nightlife: "#7C3AED", logistics: "#6B7280" };
+        const lodging = [ { name: "Sheraton Times Square", lat: 40.7626, lon: -73.9816, type: "lodging" }, { name: "Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "lodging" } ];
+        const days = [ { key: "day1", label: "Day 1", date: "Aug 28", theme: "Arrival & Manhattan Icons", summary: { totalTime: { activity: "6h", transit: "30m" }, totalCost: 120, costBreakdown: { food: 60, activities: 55, transit: 5, shopping: 0 } }, stops: [ { nodeType: "activity", order: 0, name: "Sheraton Times Square", type: "lodging", lat: 40.7626, lon: -73.9816, startTime: "2:00 PM", endTime: "2:30 PM", duration: "30m", details: { description: "Check-in and drop off luggage.", cost: 0 } }, { nodeType: "transit", mode: "walk", duration: "5m", distance: "0.3 miles", cost: 0 }, { nodeType: "activity", order: 1, name: "Times Square", type: "sightseeing", lat: 40.7580, lon: -73.9855, startTime: "2:35 PM", endTime: "4:35 PM", duration: "2h", details: { description: "A dazzling intersection famous for its bright billboards.", cost: 0, proTip: "Visit in the evening for the full effect of the lights." } }, { nodeType: "transit", mode: "walk", duration: "10m", distance: "0.5 miles", cost: 0 }, { nodeType: "activity", order: 2, name: "Top of the Rock", type: "view", lat: 40.7587, lon: -73.9787, startTime: "4:45 PM", endTime: "6:15 PM", duration: "1h 30m", details: { description: "Observation deck with stunning 360-degree views.", cost: 55, bookingUrl: "https://www.topoftherocknyc.com/buy-tickets/" } }, { nodeType: "transit", mode: "walk", duration: "15m", distance: "0.8 miles", cost: 0 }, { nodeType: "activity", order: 3, name: "Central Park", type: "park", lat: 40.7740, lon: -73.9700, startTime: "6:30 PM", endTime: "8:30 PM", duration: "2h", details: { description: "A vast urban oasis for a relaxing evening stroll.", cost: 0, proTip: "Pick a specific area to explore, like the Bethesda Terrace." } } ] }, { key: "day2", label: "Day 2", date: "Aug 29", theme: "Culture & High Line", summary: { totalTime: { activity: "6h", transit: "1h 15m" }, totalCost: 106, costBreakdown: { food: 70, activities: 30, transit: 5.80, shopping: 0 } }, stops: [ { nodeType: "activity", order: 0, name: "Union City Airbnb", type: "lodging", lat: 40.7700, lon: -74.0300, startTime: "9:30 AM", endTime: "9:30 AM", duration: "0m", details: { description: "Start of the day." } }, { nodeType: "transit", mode: "subway", duration: "45m", distance: "5 miles", cost: 2.90 }, { nodeType: "activity", order: 1, name: "The Met Museum", type: "museum", lat: 40.7794, lon: -73.9632, startTime: "10:15 AM", endTime: "2:15 PM", duration: "4h", details: { description: "One of the world's largest and finest art museums.", cost: 30, bookingUrl: "https://www.metmuseum.org/visit/plan-your-visit" } }, { nodeType: "transit", mode: "subway", duration: "30m", distance: "3 miles", cost: 2.90 }, { nodeType: "activity", order: 2, name: "The High Line", type: "park", lat: 40.7478, lon: -74.0049, startTime: "2:45 PM", endTime: "4:45 PM", duration: "2h", details: { description: "An elevated public park built on a historic freight rail line.", cost: 0, proTip: "Start at the northern end (Hudson Yards) and walk south." } } ] }, { key: "day3", label: "Day 3", date: "Aug 30", theme: "Friend Arrival & Liberty Views", summary: { totalTime: { activity: "6h", transit: "2h 15m" }, totalCost: 180, costBreakdown: { food: 60, activities: 0, transit: 120, shopping: 0 } }, stops: [ { nodeType: "activity", order: 0, name: "Union City Airbnb", type: "lodging", lat: 40.7700, lon: -74.0300, startTime: "10:00 AM", endTime: "10:00 AM", duration: "0m", details: { description: "Morning prep and departure." } }, { nodeType: "transit", mode: "car", duration: "1h 30m", distance: "20 miles", cost: 80 }, { nodeType: "activity", order: 1, name: "JFK Pickup", type: "logistics", lat: 40.6413, lon: -73.7781, startTime: "11:30 AM", endTime: "1:30 PM", duration: "2h", details: { description: "Travel to John F. Kennedy International Airport to pick up a friend.", cost: 0 } }, { nodeType: "transit", mode: "car", duration: "45m", distance: "18 miles", cost: 40 }, { nodeType: "activity", order: 2, name: "Liberty State Park", type: "sightseeing", lat: 40.7040, lon: -74.0554, startTime: "2:15 PM", endTime: "6:15 PM", duration: "4h", details: { description: "A green oasis offering dramatic views of the Manhattan skyline and Statue of Liberty.", cost: 0 } } ] }, { key: "day4", label: "Day 4", date: "Aug 31", theme: "Iconic Bridges & Brooklyn Vibes", summary: { totalTime: { activity: "8h 5m", transit: "1h 15m" }, totalCost: 118, costBreakdown: { food: 90, activities: 20, transit: 8.40, shopping: 0 } }, stops: [ { nodeType: "activity", order: 0, name: "Union City Airbnb", type: "lodging", lat: 40.7700, lon: -74.0300, startTime: "10:00 AM", endTime: "10:00 AM", duration: "0m", details: { description: "Starting point for the day." } }, { nodeType: "transit", mode: "subway", duration: "45m", distance: "6 miles", cost: 5.50, route: { type: "LineString", coordinates: [ [-74.0300, 40.7700], [-73.9910, 40.7570], [-74.0055, 40.7116] ] } }, { nodeType: "activity", order: 1, name: "Brooklyn Bridge", type: "view", lat: 40.7116, lon: -74.0055, startTime: "10:45 AM", endTime: "12:15 PM", duration: "1h 30m", details: { description: "Walk across this iconic suspension bridge.", cost: 0, proTip: "Start on the Manhattan side and walk towards Brooklyn for the best views." } }, { nodeType: "transit", mode: "walk", duration: "10m", distance: "0.5 miles", cost: 0, route: { type: "LineString", coordinates: [ [-74.0055, 40.7116], [-73.9942, 40.7033] ] } }, { nodeType: "activity", order: 2, name: "DUMBO", type: "neighborhood", lat: 40.7033, lon: -73.9942, startTime: "12:25 PM", endTime: "3:00 PM", duration: "2h 35m", details: { description: "Explore cobblestone streets and grab lunch.", cost: 0, proTip: "The classic Manhattan Bridge photo is at Washington & Water St." } }, { nodeType: "transit", mode: "subway", duration: "20m", distance: "1.5 miles", cost: 2.90, route: { type: "LineString", coordinates: [ [-73.9942, 40.7033], [-73.9570, 40.7171] ] } }, { nodeType: "activity", order: 3, name: "Williamsburg", type: "neighborhood", lat: 40.7171, lon: -73.9570, startTime: "3:20 PM", endTime: "7:20 PM", duration: "4h", details: { description: "Discover vintage shops and enjoy the vibrant foodie scene.", cost: 20 } } ] }, { key: "day5", label: "Day 5", date: "Sep 1", theme: "Downtown & Speakeasies", summary: { totalTime: { activity: "7h 30m", transit: "1h 2m" }, totalCost: 172, costBreakdown: { food: 80, activities: 83, transit: 8.70, shopping: 0 } }, stops: [ { nodeType: "activity", order: 0, name: "Union City Airbnb", type: "lodging", lat: 40.7700, lon: -74.0300, startTime: "10:00 AM", endTime: "10:00 AM", duration: "0m", details: { description: "Start of the day." } }, { nodeType: "transit", mode: "subway", duration: "45m", distance: "6 miles", cost: 2.90 }, { nodeType: "activity", order: 1, name: "9/11 Memorial & Museum", type: "memorial", lat: 40.7115, lon: -74.0134, startTime: "10:45 AM", endTime: "1:45 PM", duration: "3h", details: { description: "A poignant tribute to the lives lost in the 9/11 attacks.", cost: 29, bookingUrl: "https://www.911memorial.org/visit/visit-museum-1" } }, { nodeType: "transit", mode: "walk", duration: "2m", distance: "0.1 miles", cost: 0 }, { nodeType: "activity", order: 2, name: "One World Observatory", type: "view", lat: 40.7130, lon: -74.0132, startTime: "1:47 PM", endTime: "3:17 PM", duration: "1h 30m", details: { description: "Panoramic views from the top of One World Trade Center.", cost: 54, bookingUrl: "https://www.oneworldobservatory.com/tickets/" } }, { nodeType: "transit", mode: "walk", duration: "15m", distance: "0.8 miles", cost: 0 }, { nodeType: "activity", order: 3, name: "Chinatown", type: "neighborhood", lat: 40.7158, lon: -73.9970, startTime: "3:32 PM", endTime: "6:32 PM", duration: "3h", details: { description: "A bustling neighborhood offering authentic cuisine and vibrant street life.", cost: 0, proTip: "Be adventurous and try some street food." } } ] }, { key: "day6", label: "Day 6", date: "Sep 2", theme: "Shopping & Departure", summary: { totalTime: { activity: "5h", transit: "45m" }, totalCost: 126, costBreakdown: { food: 60, activities: 0, transit: 5.80, shopping: 60 } }, stops: [ { nodeType: "activity", order: 0, name: "Union City Airbnb", type: "lodging", lat: 40.7700, lon: -74.0300, startTime: "10:00 AM", endTime: "10:00 AM", duration: "0m", details: { description: "Check out and store luggage." } }, { nodeType: "transit", mode: "subway", duration: "30m", distance: "4 miles", cost: 2.90 }, { nodeType: "activity", order: 1, name: "Fifth Avenue", type: "shopping", lat: 40.7616, lon: -73.9742, startTime: "10:30 AM", endTime: "1:30 PM", duration: "3h", details: { description: "One of the world's most famous shopping streets.", cost: 0, proTip: "Great for window shopping even if you're not buying." } }, { nodeType: "transit", mode: "subway", duration: "15m", distance: "2 miles", cost: 2.90 }, { nodeType: "activity", order: 2, name: "Greenwich Village", type: "food", lat: 40.7336, lon: -74.0027, startTime: "1:45 PM", endTime: "3:45 PM", duration: "2h", details: { description: "A charming neighborhood perfect for a final meal.", cost: 0, proTip: "Explore the side streets to discover hidden gems." } } ] } ];
+
+        let map, activeDay = days[0].key, dayLayers = {}, lodgingLayer;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            createLegend();
+            createTabs();
+            switchDay(activeDay);
+            setupEventListeners();
+            if (window.innerWidth <= 768) {
+                setupMobileDrawer();
+            }
+        });
+
+        // Map and Legend functions
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([40.75, -73.98], 12);
+            L.control.zoom({ position: 'topright' }).addTo(map);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 20
+            }).addTo(map);
+            lodgingLayer = L.layerGroup().addTo(map);
+            lodging.forEach(place => { L.marker([place.lat, place.lon], { icon: createLodgingIcon() }).bindPopup(`<strong>${place.name}</strong>`).addTo(lodgingLayer); });
+            days.forEach(day => {
+                const group = L.layerGroup();
+                const activityStops = day.stops.filter(s => s.nodeType === 'activity');
+                activityStops.forEach(stop => { if (stop.lat && stop.lon) { L.marker([stop.lat, stop.lon], { icon: createNumberedIcon(stop.order, stop.type) }).bindPopup(`<strong>${stop.name}</strong>`).addTo(group); } });
+                day.stops.filter(s => s.nodeType === 'transit').forEach((transit, index) => {
+                    const prevActivity = activityStops[index];
+                    const nextActivity = activityStops[index + 1];
+                    if (transit.route && transit.route.coordinates) {
+                        const latLngs = transit.route.coordinates.map(coord => [coord[1], coord[0]]);
+                        L.polyline(latLngs, { color: 'var(--primary-color)', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(group);
+                    } else if (prevActivity && nextActivity && prevActivity.lat && nextActivity.lat) {
+                       L.polyline([[prevActivity.lat, prevActivity.lon], [nextActivity.lat, nextActivity.lon]], { color: '#888', weight: 2, opacity: 0.8, dashArray: '5, 5' }).addTo(group);
+                    }
+                });
+                dayLayers[day.key] = group;
+            });
+        }
+        function createNumberedIcon(number, type) { const color = TYPE_COLORS[type] || '#374151'; return L.divIcon({ html: `<div class="stop-marker" style="background-color: ${color}">${number}</div>`, className: 'stop-marker-wrapper', iconSize: [30, 30], iconAnchor: [15, 15] }); }
+        function createLodgingIcon() { return L.divIcon({ html: `<div style="background-color: ${TYPE_COLORS.lodging}"></div>`, className: 'lodging-marker', iconSize: [24, 24], iconAnchor: [12, 12] }); }
+        function createLegend() { const legendEl = document.getElementById('legend'); Object.entries(TYPE_COLORS).forEach(([type, color]) => { const item = document.createElement('div'); item.className = 'legend-item'; item.innerHTML = `<div class="legend-dot" style="background: ${color}"></div><span>${type.charAt(0).toUpperCase() + type.slice(1)}</span>`; legendEl.appendChild(item); }); }
+
+        // Core App Logic
+        function createTabs() { const tabsEl = document.getElementById('tabs'); tabsEl.innerHTML = ''; days.forEach(day => { const tab = document.createElement('button'); tab.className = `tab ${day.key === activeDay ? 'active' : ''}`; tab.innerHTML = `<div>${day.label}</div><div class="tab-date">${day.date}</div>`; tab.onclick = () => switchDay(day.key); tabsEl.appendChild(tab); }); }
+        function switchDay(dayKey) { activeDay = dayKey; Object.values(dayLayers).forEach(layer => map.removeLayer(layer)); if (dayLayers[dayKey]) map.addLayer(dayLayers[dayKey]); createTabs(); updateItinerary(dayKey); fitBoundsToDay(dayKey); }
+        function getTransitIcon(mode) { switch (mode) { case 'walk': return '🚶‍♂️'; case 'subway': return '🚇'; case 'car': return '🚗'; case 'bus': return '🚌'; default: return '➡️'; } }
+
+        function updateItinerary(dayKey) {
+            const day = days.find(d => d.key === dayKey);
+            const itineraryEl = document.getElementById('itinerary');
+            const mobileHeader = document.querySelector('.day-theme-mobile');
+            if (mobileHeader) mobileHeader.textContent = day.theme;
+            const summaryHTML = `<div class="day-summary-grid"> <div class="summary-item"> <span class="label">Est. Cost</span> <span class="value">$${day.summary.totalCost}</span> <span class="sub-value">Food: $${day.summary.costBreakdown.food}, Acts: $${day.summary.costBreakdown.activities}</span> </div> <div class="summary-item"> <span class="label">Activity Time</span> <span class="value">${day.summary.totalTime.activity}</span> <span class="sub-value">+ ${day.summary.totalTime.transit} transit</span> </div> </div>`;
+            const timelineHTML = day.stops.map(stop => {
+                if (stop.nodeType === 'activity') { return `<li class="activity-card" data-lat="${stop.lat}" data-lon="${stop.lon}"> <div class="activity-icon"> <div style="background-color: ${TYPE_COLORS[stop.type] || '#333'}">${stop.order}</div> </div> <div class="activity-content"> <div class="activity-header"> <span class="activity-name">${stop.name}</span> <span class="activity-time">${stop.startTime} - ${stop.endTime}</span> </div> <div class="activity-type" style="color: ${TYPE_COLORS[stop.type] || '#333'}"> ${stop.type.charAt(0).toUpperCase() + stop.type.slice(1)} • ${stop.duration} </div> <div class="activity-details-toggle">Show details</div> <div class="activity-details-collapsible"> <p>${stop.details.description || ''}</p> ${stop.details.address ? `<div class="detail-item"><strong>Address:</strong> ${stop.details.address}</div>` : ''} ${stop.details.hours ? `<div class="detail-item"><strong>Hours:</strong> ${stop.details.hours}</div>` : ''} ${stop.details.cost ? `<div class="detail-item"><strong>Est. Cost:</strong> $${stop.details.cost}</div>` : ''} ${stop.details.proTip ? `<div class="detail-item"><strong>Pro Tip:</strong> ${stop.details.proTip}</div>` : ''} ${stop.details.bookingUrl ? `<div class="detail-item"><a href="${stop.details.bookingUrl}" target="_blank">Book or Check Website</a></div>` : ''} </div> </div> </li>`; }
+                else { return `<li class="transit-leg"> <div class="transit-details"> <span class="mode-icon">${getTransitIcon(stop.mode)}</span> ${stop.duration} <strong>${stop.mode}</strong> ${stop.distance ? `• ${stop.distance}` : ''} ${stop.cost > 0 ? `• $${stop.cost.toFixed(2)}` : ''} </div> </li>`; }
+            }).join('');
+            itineraryEl.innerHTML = `<div class="day-info"> <h2 class="day-theme">${day.theme}</h2> ${summaryHTML} <ul class="timeline"> ${timelineHTML} </ul> </div>`;
+        }
+
+        function setupEventListeners() {
+            document.getElementById('itinerary').addEventListener('click', function(e) {
+                if (e.target.classList.contains('activity-details-toggle')) {
+                    const details = e.target.nextElementSibling;
+                    if (details.style.display === 'block') { details.style.display = 'none'; e.target.textContent = 'Show details'; }
+                    else { details.style.display = 'block'; e.target.textContent = 'Hide details'; }
+                }
+                const card = e.target.closest('.activity-card');
+                if (card) { const lat = card.dataset.lat; const lon = card.dataset.lon; if (lat && lon) focusOnStop(lat, lon); }
+            });
+        }
+        function focusOnStop(lat, lon) { map.setView([lat, lon], 15, { animate: true, pan: { duration: 1 } }); }
+        function fitBoundsToDay(dayKey) {
+            const day = days.find(d => d.key === dayKey);
+            const activityStops = day.stops.filter(s => s.nodeType === 'activity' && s.lat);
+            if (activityStops.length === 0) return;
+            const bounds = L.latLngBounds(activityStops.map(s => [s.lat, s.lon]));
+            lodging.forEach(l => bounds.extend([l.lat, l.lon]));
+            if (bounds.isValid()) {
+                 if (window.innerWidth <= 768) {
+                    const peekHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--drawer-peek-height'));
+                    map.fitBounds(bounds, { padding: [40, 40], paddingTop: 40, paddingBottom: peekHeight });
+                } else {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
+            }
+        }
+
+        // --- REBUILT & CORRECTED MOBILE DRAWER LOGIC ---
+        function setupMobileDrawer() {
+            const drawer = document.getElementById('sidebar');
+            const handle = drawer.querySelector('.mobile-drawer-header');
+            
+            let isDragging = false, startY, startTransform;
+            
+            const vh = window.innerHeight;
+            const PEEK = vh - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--drawer-peek-height'));
+            const HALF = vh - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--drawer-half-height'));
+            const FULL = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--drawer-full-offset'));
+
+            const onTouchMove = (e) => {
+                if (!isDragging) return;
+                const currentY = e.touches[0].clientY;
+                const diff = currentY - startY;
+                let newTransform = Math.max(FULL, startTransform + diff); // Don't allow dragging past the top
+                drawer.style.transform = `translateY(${newTransform}px)`;
+            };
+
+            const onTouchEnd = (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                drawer.classList.remove('is-dragging');
+                window.removeEventListener('touchmove', onTouchMove);
+                window.removeEventListener('touchend', onTouchEnd);
+                
+                const currentTransform = new DOMMatrixReadOnly(getComputedStyle(drawer).transform).m42;
+                const points = [PEEK, HALF, FULL];
+                const closest = points.reduce((prev, curr) => Math.abs(curr - currentTransform) < Math.abs(prev - currentTransform) ? curr : prev);
+                
+                drawer.style.transform = `translateY(${closest}px)`;
+            };
+
+            handle.addEventListener('touchstart', (e) => {
+                isDragging = true;
+                startY = e.touches[0].clientY;
+                startTransform = new DOMMatrixReadOnly(getComputedStyle(drawer).transform).m42;
+                drawer.classList.add('is-dragging');
+                
+                window.addEventListener('touchmove', onTouchMove, { passive: false });
+                window.addEventListener('touchend', onTouchEnd);
+            }, { passive: true });
+        }
+    </script>
+</body>
+</html>

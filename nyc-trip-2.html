@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Travel Planner - NYC Itinerary</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #fef7f0 0%, #ffffff 50%, #fff7ed 100%);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 15px 20px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+
+        .header-left {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 3px;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.3;
+        }
+
+        .live-badge {
+            background: linear-gradient(45deg, #ff385c, #fd5c63);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: 500;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            flex-shrink: 0;
+        }
+
+        /* Legend Toggle for Mobile */
+        .legend-toggle {
+            display: none;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 20px;
+            padding: 8px 15px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .legend.collapsed {
+            display: none;
+        }
+
+        /* Tabs */
+        .tabs-section {
+            position: fixed;
+            top: 140px;
+            left: 0;
+            right: 0;
+            z-index: 900;
+            background: rgba(247, 250, 252, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 15px 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab {
+            padding: 12px 18px;
+            border-radius: 12px;
+            border: none;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: all 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e0e0e0;
+            min-width: 90px;
+            text-align: center;
+        }
+
+        .tab:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+        }
+
+        .tab.active {
+            background: linear-gradient(45deg, #ff385c, #fd5c63);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 15px rgba(255, 56, 92, 0.3);
+        }
+
+        .tab-date {
+            font-size: 11px;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        /* Day Info */
+        .day-info {
+            position: fixed;
+            top: 200px;
+            left: 0;
+            right: 0;
+            z-index: 800;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 15px 20px;
+        }
+
+        .day-info-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .day-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 5px;
+        }
+
+        .day-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            color: #666;
+            flex-wrap: wrap;
+        }
+
+        .day-badge {
+            background: linear-gradient(45deg, #ff385c, #fd5c63);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .stops-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+        }
+
+        .stop-card {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .stop-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .stop-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .stop-number {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .stop-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #222;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .stop-duration {
+            font-size: 10px;
+            color: #666;
+        }
+
+        /* Map */
+        .map-container {
+            position: fixed;
+            top: 290px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 100;
+            padding: 0 10px 10px 10px;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .header {
+                padding: 10px 15px;
+            }
+
+            .header-content {
+                margin-bottom: 10px;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+
+            .header-left {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .title {
+                font-size: 18px;
+            }
+
+            .subtitle {
+                font-size: 12px;
+            }
+
+            .live-badge {
+                padding: 6px 12px;
+                font-size: 11px;
+                align-self: flex-start;
+            }
+
+            /* Hide legend on mobile, show toggle instead */
+            .legend {
+                display: none;
+            }
+
+            .legend-toggle {
+                display: block;
+                text-align: center;
+            }
+
+            .legend.show {
+                display: flex;
+                margin-top: 10px;
+            }
+
+            .legend-item {
+                padding: 4px 8px;
+                font-size: 10px;
+            }
+
+            .legend-dot {
+                width: 6px;
+                height: 6px;
+            }
+
+            .tabs-section {
+                top: 120px;
+                padding: 10px 15px;
+            }
+
+            .day-info {
+                top: 170px;
+                padding: 10px 15px;
+            }
+
+            .map-container {
+                top: 240px;
+                padding: 0 5px 5px 5px;
+            }
+
+            .stops-grid {
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+
+            .day-info-header {
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 10px;
+            }
+
+            .day-stats {
+                gap: 10px;
+                font-size: 11px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .title {
+                font-size: 16px;
+            }
+
+            .subtitle {
+                font-size: 11px;
+            }
+
+            .live-badge {
+                padding: 5px 10px;
+                font-size: 10px;
+            }
+
+            .tab {
+                padding: 8px 12px;
+                font-size: 12px;
+                min-width: 70px;
+            }
+
+            .tab-date {
+                font-size: 10px;
+            }
+
+            .day-title {
+                font-size: 16px;
+            }
+
+            .stop-card {
+                padding: 8px;
+            }
+
+            .stop-name {
+                font-size: 11px;
+            }
+
+            .stop-duration {
+                font-size: 9px;
+            }
+        }
+
+        /* Loading */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #ff385c;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <div>
+                    <h1 class="title">NYC Adventure</h1>
+                    <p class="subtitle">Aug 28 - Sep 2, 2025 • 6 days</p>
+                </div>
+                <div class="live-badge">✨ Live Itinerary</div>
+            </div>
+        </div>
+
+        <!-- Legend Toggle for Mobile -->
+        <button class="legend-toggle" onclick="toggleLegend()">
+            🎨 Show Legend
+        </button>
+
+        <!-- Legend -->
+        <div id="legend" class="legend"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-section">
+        <div id="tabs" class="tabs"></div>
+    </div>
+
+    <!-- Day Info Panel -->
+    <div id="dayInfo" class="day-info"></div>
+
+    <!-- Map Container -->
+    <div class="map-container">
+        <div id="map">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading map...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Simple data structure
+        const TYPE_COLORS = {
+            sightseeing: "#FF385C",
+            museum: "#E31C5F",
+            park: "#00A699",
+            neighborhood: "#8B5CF6",
+            view: "#F59E0B",
+            memorial: "#06B6D4",
+            market: "#F97316",
+            shopping: "#64748B",
+            other: "#374151",
+            lodging: "#FF5A5F",
+            food: "#10B981",
+            nightlife: "#7C3AED",
+            logistics: "#6B7280"
+        };
+
+        const lodging = [
+            { name: "Sheraton Times Square", lat: 40.7626, lon: -73.9816, type: "lodging" },
+            { name: "Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "lodging" }
+        ];
+
+        const days = [
+            {
+                key: "day1",
+                label: "Day 1",
+                date: "Aug 28",
+                theme: "Arrival & Manhattan Icons",
+                budget: "$150-200",
+                walking: "4 miles",
+                stops: [
+                    { order: 0, name: "Sheraton Times Square", lat: 40.7626, lon: -73.9816, type: "other", duration: "30min" },
+                    { order: 1, name: "Times Square", lat: 40.7580, lon: -73.9855, type: "sightseeing", duration: "2hrs" },
+                    { order: 2, name: "Top of the Rock", lat: 40.7587, lon: -73.9787, type: "view", duration: "1.5hrs" },
+                    { order: 3, name: "Central Park", lat: 40.7740, lon: -73.9700, type: "park", duration: "2hrs" }
+                ]
+            },
+            {
+                key: "day2",
+                label: "Day 2",
+                date: "Aug 29",
+                theme: "Culture & High Line",
+                budget: "$200-300",
+                walking: "5 miles",
+                stops: [
+                    { order: 0, name: "Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other", duration: "30min" },
+                    { order: 1, name: "The Met Museum", lat: 40.7794, lon: -73.9632, type: "museum", duration: "4hrs" },
+                    { order: 2, name: "The High Line", lat: 40.7478, lon: -74.0049, type: "park", duration: "2hrs" }
+                ]
+            },
+            {
+                key: "day3",
+                label: "Day 3",
+                date: "Aug 30",
+                theme: "Friend Arrival & Liberty",
+                budget: "$100-150",
+                walking: "3 miles",
+                stops: [
+                    { order: 0, name: "Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other", duration: "1hr" },
+                    { order: 1, name: "JFK Pickup", lat: 40.6413, lon: -73.7781, type: "logistics", duration: "2hrs" },
+                    { order: 2, name: "Liberty State Park", lat: 40.7040, lon: -74.0554, type: "sightseeing", duration: "4hrs" }
+                ]
+            },
+            {
+                key: "day4",
+                label: "Day 4",
+                date: "Aug 31",
+                theme: "Brooklyn Adventure",
+                budget: "$180-250",
+                walking: "4 miles",
+                stops: [
+                    { order: 0, name: "Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other", duration: "30min" },
+                    { order: 1, name: "Brooklyn Bridge", lat: 40.7116, lon: -74.0055, type: "view", duration: "1hr" },
+                    { order: 2, name: "DUMBO", lat: 40.7033, lon: -73.9942, type: "neighborhood", duration: "3hrs" },
+                    { order: 3, name: "Williamsburg", lat: 40.7171, lon: -73.9570, type: "neighborhood", duration: "4hrs" }
+                ]
+            },
+            {
+                key: "day5",
+                label: "Day 5",
+                date: "Sep 1",
+                theme: "Downtown & Speakeasies",
+                budget: "$200-300",
+                walking: "5 miles",
+                stops: [
+                    { order: 0, name: "Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other", duration: "30min" },
+                    { order: 1, name: "9/11 Memorial", lat: 40.7115, lon: -74.0134, type: "memorial", duration: "3hrs" },
+                    { order: 2, name: "One World Observatory", lat: 40.7130, lon: -74.0132, type: "view", duration: "1.5hrs" },
+                    { order: 3, name: "Chinatown", lat: 40.7158, lon: -73.9970, type: "neighborhood", duration: "3hrs" }
+                ]
+            },
+            {
+                key: "day6",
+                label: "Day 6",
+                date: "Sep 2",
+                theme: "Shopping & Departure",
+                budget: "$150-250",
+                walking: "3 miles",
+                stops: [
+                    { order: 0, name: "Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other", duration: "30min" },
+                    { order: 1, name: "Fifth Avenue", lat: 40.7616, lon: -73.9742, type: "shopping", duration: "3hrs" },
+                    { order: 2, name: "Greenwich Village", lat: 40.7336, lon: -74.0027, type: "food", duration: "2hrs" }
+                ]
+            }
+        ];
+
+        // Create legend
+        const legendEl = document.getElementById('legend');
+        Object.entries(TYPE_COLORS).forEach(([type, color]) => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.innerHTML = `
+                <div class="legend-dot" style="background: ${color}"></div>
+                <span>${type.charAt(0).toUpperCase() + type.slice(1)}</span>
+            `;
+            legendEl.appendChild(item);
+        });
+
+        // Initialize map
+        let map;
+        let activeDay = days[0].key;
+        let dayLayers = {};
+        let lodgingLayer;
+
+        function initMap() {
+            try {
+                // Clear loading
+                document.getElementById('map').innerHTML = '';
+
+                // Initialize map
+                map = L.map('map', {
+                    scrollWheelZoom: true,
+                    zoomControl: true
+                }).setView([40.75, -73.98], 12);
+
+                // Add tile layer
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+
+                // Create lodging layer
+                lodgingLayer = L.layerGroup().addTo(map);
+
+                // Add lodging markers
+                lodging.forEach(place => {
+                    const marker = L.marker([place.lat, place.lon], {
+                        icon: createLodgingIcon()
+                    }).bindPopup(`<strong>${place.name}</strong><br/>Lodging`);
+                    lodgingLayer.addLayer(marker);
+                });
+
+                // Create day layers
+                days.forEach(day => {
+                    const group = L.layerGroup();
+                    const coordinates = [];
+
+                    day.stops.forEach(stop => {
+                        coordinates.push([stop.lat, stop.lon]);
+
+                        const marker = L.marker([stop.lat, stop.lon], {
+                            icon: createNumberedIcon(stop.order, stop.type)
+                        }).bindPopup(`
+                            <div style="min-width: 200px;">
+                                <strong>${stop.name}</strong><br/>
+                                <small>Duration: ${stop.duration}</small>
+                            </div>
+                        `);
+
+                        group.addLayer(marker);
+                    });
+
+                    // Add route line
+                    if (coordinates.length > 1) {
+                        const polyline = L.polyline(coordinates, {
+                            color: '#FF385C',
+                            weight: 3,
+                            opacity: 0.7,
+                            dashArray: '5,5'
+                        });
+                        group.addLayer(polyline);
+                    }
+
+                    dayLayers[day.key] = group;
+                });
+
+                // Initialize UI
+                createTabs();
+                switchDay(activeDay);
+
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                document.getElementById('map').innerHTML = '<div class="loading"><p>Error loading map. Please refresh the page.</p></div>';
+            }
+        }
+
+        function createNumberedIcon(number, type) {
+            const color = TYPE_COLORS[type] || '#374151';
+            return L.divIcon({
+                html: `<div style="
+                    display: flex; align-items: center; justify-content: center;
+                    width: 28px; height: 28px; border-radius: 50%;
+                    background: ${color}; color: white;
+                    font-weight: bold; font-size: 12px;
+                    border: 2px solid white;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                ">${number}</div>`,
+                className: '',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+        }
+
+        function createLodgingIcon() {
+            return L.divIcon({
+                html: `<div style="
+                    width: 16px; height: 24px;
+                    background: ${TYPE_COLORS.lodging};
+                    border: 2px solid white;
+                    border-radius: 8px 8px 0 0;
+                    position: relative;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                ">
+                    <div style="
+                        position: absolute; left: 50%; bottom: -8px;
+                        transform: translateX(-50%);
+                        width: 0; height: 0;
+                        border-left: 8px solid transparent;
+                        border-right: 8px solid transparent;
+                        border-top: 8px solid ${TYPE_COLORS.lodging};
+                    "></div>
+                </div>`,
+                className: '',
+                iconSize: [20, 32],
+                iconAnchor: [10, 24]
+            });
+        }
+
+        function createTabs() {
+            const tabsEl = document.getElementById('tabs');
+            tabsEl.innerHTML = '';
+
+            days.forEach(day => {
+                const tab = document.createElement('button');
+                tab.className = `tab ${day.key === activeDay ? 'active' : ''}`;
+                tab.innerHTML = `
+                    <div>${day.label}</div>
+                    <div class="tab-date">${day.date}</div>
+                `;
+                tab.onclick = () => switchDay(day.key);
+                tabsEl.appendChild(tab);
+            });
+        }
+
+        function updateDayInfo(dayKey) {
+            const day = days.find(d => d.key === dayKey);
+            const dayInfoEl = document.getElementById('dayInfo');
+
+            dayInfoEl.innerHTML = `
+                <div class="day-info-header">
+                    <div>
+                        <h2 class="day-title">${day.theme}</h2>
+                        <div class="day-stats">
+                            <span>📅 ${day.date}</span>
+                            <span>💰 ${day.budget}</span>
+                            <span>🚶 ${day.walking}</span>
+                        </div>
+                    </div>
+                    <div class="day-badge">${day.stops.length} stops</div>
+                </div>
+                
+                <div class="stops-grid">
+                    ${day.stops.map(stop => `
+                        <div class="stop-card" onclick="focusOnStop(${stop.lat}, ${stop.lon})">
+                            <div class="stop-header">
+                                <div class="stop-number" style="background: ${TYPE_COLORS[stop.type]}">${stop.order}</div>
+                                <span class="stop-name">${stop.name}</span>
+                            </div>
+                            <div class="stop-duration">${stop.duration}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function switchDay(dayKey) {
+            // Remove all day layers
+            Object.values(dayLayers).forEach(layer => {
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            activeDay = dayKey;
+
+            // Add selected day layer
+            if (dayLayers[dayKey]) {
+                map.addLayer(dayLayers[dayKey]);
+            }
+
+            // Update UI
+            createTabs();
+            updateDayInfo(dayKey);
+
+            // Fit bounds
+            try {
+                const allLayers = [lodgingLayer];
+                if (dayLayers[dayKey]) {
+                    allLayers.push(dayLayers[dayKey]);
+                }
+                const group = L.featureGroup(allLayers);
+                const bounds = group.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [20, 20] });
+                }
+            } catch (error) {
+                console.log('Error fitting bounds:', error);
+            }
+        }
+
+        function focusOnStop(lat, lon) {
+            if (map) {
+                map.setView([lat, lon], 15);
+            }
+        }
+
+        function toggleLegend() {
+            const legend = document.getElementById('legend');
+            const toggle = document.querySelector('.legend-toggle');
+
+            if (legend.classList.contains('show')) {
+                legend.classList.remove('show');
+                toggle.textContent = '🎨 Show Legend';
+            } else {
+                legend.classList.add('show');
+                toggle.textContent = '🎨 Hide Legend';
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(initMap, 100); // Small delay to ensure DOM is ready
+        });
+
+        // Also try to initialize immediately in case DOMContentLoaded already fired
+        if (document.readyState === 'loading') {
+            // Still loading, wait for DOMContentLoaded
+        } else {
+            // Already loaded
+            setTimeout(initMap, 100);
+        }
+    </script>
+</body>
+
+</html>

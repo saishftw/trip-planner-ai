@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>NYC Itinerary Map — Day Tabs (Fixed)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <style>
+        :root {
+            --header-h: 108px;
+            /* header + legend block height */
+            --tabs-h: 54px;
+            /* tab bar height */
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            color: #111;
+        }
+
+        /* Fixed header and tabs on top, map below */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10000;
+            padding: 10px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #ffffff;
+        }
+
+        .title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: #555;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+
+        .tabs-bar {
+            position: fixed;
+            top: var(--header-h);
+            left: 0;
+            right: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f7fafc;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+        }
+
+        .tab {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            user-select: none;
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
+
+        .tab.active {
+            background: #0b74de;
+            color: #fff;
+            border-color: #0b74de;
+        }
+
+        .day-select {
+            margin-left: auto;
+            font-size: 14px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+        }
+
+        .day-info {
+            position: fixed;
+            top: calc(var(--header-h) + var(--tabs-h));
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            padding: 8px 12px;
+            font-size: 13px;
+            color: #333;
+            background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .stop-list {
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+        }
+
+        .stop-pill {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f8fafc;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            margin-right: 6px;
+            background: #111;
+        }
+
+        /* Map occupies remaining space below fixed bars */
+        #map {
+            position: absolute;
+            top: calc(var(--header-h) + var(--tabs-h) + 56px);
+            /* header + tabs + dayInfo approx */
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="title">NYC Itinerary Map (Aug 28–Sep 2, 2025)</div>
+        <div class="subtitle">Use tabs or the dropdown to switch days. 0 = start, last = end. Lodging is always visible.
+        </div>
+        <div id="legend" class="legend"></div>
+    </div>
+
+    <div class="tabs-bar">
+        <div id="tabs" class="tabs" aria-label="Day tabs"></div>
+    </div>
+
+    <div id="dayInfo" class="day-info"></div>
+    <div id="map" role="region" aria-label="Itinerary map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        // Type colors
+        const TYPE_COLORS = {
+            sightseeing: "#0ea5e9",
+            museum: "#ef4444",
+            park: "#22c55e",
+            neighborhood: "#a855f7",
+            view: "#f59e0b",
+            memorial: "#06b6d4",
+            market: "#f97316",
+            shopping: "#64748b",
+            other: "#334155",
+            lodging: "#8e44ad"
+        };
+
+        // Legend
+        const legendEl = document.getElementById('legend');
+        ["sightseeing", "museum", "park", "neighborhood", "view", "memorial", "market", "shopping", "other", "lodging"].forEach(type => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            const sw = document.createElement('div');
+            sw.className = 'swatch';
+            sw.style.background = TYPE_COLORS[type];
+            const label = document.createElement('span');
+            label.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+            item.appendChild(sw); item.appendChild(label);
+            legendEl.appendChild(item);
+        });
+
+        // Data
+        const lodging = [
+            { name: "Sheraton New York Times Square Hotel (Aug 28)", lat: 40.7626, lon: -73.9816, type: "lodging" },
+            { name: "Union City Airbnb (Aug 29–Sep 2)", lat: 40.7700, lon: -74.0300, type: "lodging" }
+        ];
+
+        const days = [
+            {
+                key: "day1",
+                label: "Day 1 (Aug 28)",
+                stops: [
+                    { order: 0, name: "Start: Sheraton New York Times Square", lat: 40.7626, lon: -73.9816, type: "other" },
+                    { order: 1, name: "Times Square (casual explore)", lat: 40.7580, lon: -73.9855, type: "sightseeing", recommendations: ["Joe's Pizza (Times Sq)", "Los Tacos No. 1 (Times Sq)", "The Halal Guys (53rd & 6th)"] },
+                    { order: 2, name: "Rockefeller Center / Top of the Rock (sunset view)", lat: 40.7587, lon: -73.9787, type: "view", recommendations: ["Bar SixtyFive at Rainbow Room (drinks)"] },
+                    { order: 3, name: "Central Park (Bethesda Terrace area)", lat: 40.7740, lon: -73.9700, type: "park", recommendations: ["Le Pain Quotidien (inside park)", "The Loeb Boathouse Express (if open)"] },
+                    { order: 4, name: "Relaxed dinner (Midtown)", lat: 40.7600, lon: -73.9800, type: "food", recommendations: ["Katz’s Delicatessen (classic deli, short cab)", "Yakitori Totto", "Szechuan Mountain House (Midtown)"] },
+                    { order: 5, name: "Night drinks (Times Sq/Midtown)", lat: 40.7590, lon: -73.9845, type: "nightlife", recommendations: ["230 Fifth Rooftop", "Refinery Rooftop", "The Rum House (classic cocktail bar)"] },
+                    { order: 6, name: "End: Times Square", lat: 40.7580, lon: -73.9855, type: "other" }
+                ]
+            },
+            {
+                key: "day2",
+                label: "Day 2 (Aug 29)",
+                stops: [
+                    { order: 0, name: "Start: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" },
+                    { order: 1, name: "The Metropolitan Museum of Art (highlights)", lat: 40.7794, lon: -73.9632, type: "museum", recommendations: ["The Met Dining Room (if available)", "Cafe Sabarsky (5th Ave, Austrian)"] },
+                    { order: 2, name: "Central Park (Strawberry Fields to Bethesda)", lat: 40.7756, lon: -73.9746, type: "park", recommendations: ["Wafels & Dinges cart (if spotted)", "Levain Bakery (UWS)"] },
+                    { order: 3, name: "The High Line (stroll)", lat: 40.7478, lon: -74.0049, type: "park", recommendations: ["Chelsea Market bites crawl", "Los Mariscos (fish tacos)"] },
+                    { order: 4, name: "Early dinner (Union Sq/Flatiron)", lat: 40.7359, lon: -73.9911, type: "food", recommendations: ["Döner Haus (Union Sq)", "Shake Shack (original Madison Sq Park)", "Eataly Flatiron"] },
+                    { order: 5, name: "Night out (East Village)", lat: 40.7273, lon: -73.9857, type: "nightlife", recommendations: ["Please Don’t Tell (PDT) speakeasy", "Amor y Amargo", "Death & Co"] },
+                    { order: 6, name: "End: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" }
+                ]
+            },
+            {
+                key: "day3",
+                label: "Day 3 (Aug 30)",
+                stops: [
+                    { order: 0, name: "Start: Union City Airbnb (friend arrival day)", lat: 40.7700, lon: -74.0300, type: "other" },
+                    { order: 1, name: "Friend arrives from JFK (approx 8:30–9:30 AM)", lat: 40.6413, lon: -73.7781, type: "logistics", recommendations: ["Yellow cab / Uber from JFK", "Coffee at home base on arrival"] },
+                    { order: 2, name: "Union City morning explore (while waiting/after arrival)", lat: 40.7700, lon: -74.0300, type: "neighborhood", recommendations: ["Bergenline Avenue (Latin bakeries)", "Washington Park", "Hudson River Waterfront Walkway (Weehawken)"] },
+                    { order: 3, name: "Statue of Liberty from Liberty State Park (less queues)", lat: 40.7040, lon: -74.0554, type: "sightseeing", recommendations: ["Depart Liberty State Park ferries", "Optional Ellis Island stop", "Light lunch: Liberty House Cafe or bring snacks"] },
+                    { order: 4, name: "Scenic transfer: Staten Island Ferry to Manhattan (free views)", lat: 40.6437, lon: -74.0737, type: "transport", recommendations: ["St. George Terminal to Whitehall (Battery Park)", "Best at sunset for skyline"] },
+                    { order: 5, name: "Times Square (evening/night)", lat: 40.7580, lon: -73.9855, type: "sightseeing", recommendations: ["Los Tacos No. 1 (Times Sq)", "Joe’s Pizza (Times Sq)", "The Halal Guys (53rd & 6th)"] },
+                    { order: 6, name: "Night drinks (Midtown/Times Sq)", lat: 40.7590, lon: -73.9845, type: "nightlife", recommendations: ["The Rum House", "Tanner Smith’s (speakeasy vibe)", "St. Cloud Rooftop at Knickerbocker"] },
+                    { order: 7, name: "End: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" }
+                ]
+            },
+            {
+                key: "day4",
+                label: "Day 4 (Aug 31, Saturday)",
+                stops: [
+                    { order: 0, name: "Start: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" },
+                    { order: 1, name: "Brooklyn Bridge (walk from Manhattan side)", lat: 40.7116, lon: -74.0055, type: "view", recommendations: ["Leo’s Bagels (pre-walk bite)", "Eileen’s Special Cheesecake (nearby, quick detour)"] },
+                    { order: 2, name: "DUMBO / Brooklyn Bridge Park", lat: 40.7033, lon: -73.9942, type: "neighborhood", recommendations: ["Time Out Market food hall", "Juliana’s Pizza", "OddFellows Ice Cream"] },
+                    { order: 3, name: "Brooklyn Heights Promenade", lat: 40.6969, lon: -73.9967, type: "view", recommendations: ["Henry Public (cocktails)", "Noodle Pudding (Italian, relaxed)"] },
+                    { order: 4, name: "Williamsburg (Bedford Ave) + Burger in Brooklyn", lat: 40.7171, lon: -73.9570, type: "neighborhood", recommendations: ["Gotham Burger Social Club (LES is across river; keep in Brooklyn: 7th Street Burger Williamsburg)", "Peter Luger (steak, reservation advised)", "Lilia (Italian, tough res but great)"] },
+                    { order: 5, name: "Night out (stay in Brooklyn/Williamsburg)", lat: 40.7171, lon: -73.9570, type: "nightlife", recommendations: ["Westlight Rooftop (The William Vale)", "The Four Horsemen (wine bar)", "Brooklyn Brewery (chill)"] },
+                    { order: 6, name: "End: Union City Airbnb (return from Brooklyn)", lat: 40.7700, lon: -74.0300, type: "other" }
+                ]
+            },
+            {
+                key: "day5",
+                label: "Day 5 (Sep 1)",
+                stops: [
+                    { order: 0, name: "Start: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" },
+                    { order: 1, name: "9/11 Memorial & Museum", lat: 40.7115, lon: -74.0134, type: "memorial", recommendations: ["Blue Bottle Coffee (World Trade Center)", "Leo’s Bagels (Stone St)"] },
+                    { order: 2, name: "One World Observatory", lat: 40.7130, lon: -74.0132, type: "view", recommendations: ["Eataly Downtown (quick bites)", "Brown Butter Craft Bar & Kitchen (casual)"] },
+                    { order: 3, name: "Wall Street / Trinity Church", lat: 40.7075, lon: -74.0113, type: "sightseeing", recommendations: ["Fraunces Tavern (historic pub)"] },
+                    { order: 4, name: "Chinatown", lat: 40.7158, lon: -73.9970, type: "neighborhood", recommendations: ["Nom Wah Tea Parlor (dim sum)", "Xi’an Famous Foods (noodles)"] },
+                    { order: 5, name: "Little Italy", lat: 40.7191, lon: -73.9973, type: "neighborhood", recommendations: ["Ferrara Bakery (cannoli)", "Rubirosa (thin-crust pizza, nearby Nolita)"] },
+                    { order: 6, name: "SoHo (shopping + dinner)", lat: 40.7233, lon: -74.0030, type: "shopping", recommendations: ["Prince Street Pizza", "Sadelle’s (if available)", "Shuka (Mediterranean)"] },
+                    { order: 7, name: "Speakeasy night (choose one)", lat: 40.7410, lon: -73.9900, type: "nightlife", recommendations: ["Please Don’t Tell (East Village)", "Raines Law Room (Flatiron/Midtown)", "Bathtub Gin (Chelsea)", "Madame George (Midtown)"] },
+                    { order: 8, name: "End: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" }
+                ]
+            },
+            {
+                key: "day6",
+                label: "Day 6 (Sep 2)",
+                stops: [
+                    { order: 0, name: "Start: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" },
+                    { order: 1, name: "Fifth Avenue (49th–60th St) shopping stroll", lat: 40.7616, lon: -73.9742, type: "shopping", recommendations: ["The Plaza Food Hall (casual options)", "Sarabeth’s Central Park South (brunchy)"] },
+                    { order: 2, name: "Greenwich Village food crawl (flexible)", lat: 40.7336, lon: -74.0027, type: "food", recommendations: ["Mamoun’s Falafel", "Murray’s Cheese Bar", "Joe’s Pizza Carmine St", "Taco Mahal (Indian-Mex fusion)"] },
+                    { order: 3, name: "Relaxed early dinner (wrap-up before heading back)", lat: 40.7415, lon: -73.9903, type: "food", recommendations: ["L’Artusi (West Village, upscale but relaxed)", "Balthazar (SoHo, French brasserie)", "Upland (Flatiron, Californian)", "Llama San (Peruvian-Japanese)"] },
+                    { order: 4, name: "Return to Union City to prepare for airport", lat: 40.7700, lon: -74.0300, type: "logistics", recommendations: ["Target to be back by ~17:30–18:00 for a 22:00 flight prep", "Pack, freshen up, and depart when ready"] },
+                    { order: 5, name: "End: Union City Airbnb", lat: 40.7700, lon: -74.0300, type: "other" }
+                ]
+            }
+        ];
+
+        const notes = {
+            museums_policy: "Only The Met kept as must-visit. MoMA/Guggenheim/Brooklyn Museum removed per request.",
+            mona_lisa_fact: "The original Mona Lisa is at the Louvre in Paris; MoMA does not have it.",
+            statue_of_liberty_plan: "Use Liberty State Park (NJ) departure to avoid long queues; optionally return via free Staten Island Ferry for skyline views, then continue to Times Square.",
+            niagara_day_trip: "Not recommended for this calm trip due to long travel times and August crowds; consider future 1–2 day visit instead.",
+            food_additions_confirmed: "Gotham Burger Social Club, Döner Haus, Los Tacos No. 1 added where relevant.",
+            speakeasy_night: "Dedicated on Sep 1 with multiple options; reservations or early walk-in advised.",
+            pace: "Plan is flexible with optional pointers; skip items if it feels hectic.",
+            changes_applied: {
+                day4_flow: "Kept all activities within Brooklyn (no back-and-forth to Manhattan); burger and night out both in Brooklyn/Williamsburg; then return to Union City.",
+                day6_airport_buffer: "Added explicit step to return to Union City by early evening for a 22:00 flight; no airport leg included inside the day plan."
+            }
+        };
+
+        // Map init
+        const map = L.map('map', { scrollWheelZoom: true, preferCanvas: true }).setView([40.75, -73.98], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Icons
+        function numberedIcon(n, type) {
+            const bg = TYPE_COLORS[type] || '#111';
+            const html = `
+        <div style="
+          display:flex;align-items:center;justify-content:center;
+          width:28px;height:28px;border-radius:50%;
+          background:${bg};color:#fff;font-weight:700;font-size:13px;
+          border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);
+        ">${n}</div>`;
+            return L.divIcon({ html, className: '', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
+        }
+        function lodgingIcon() {
+            const html = `
+        <div style="
+          width:14px;height:22px;background:${TYPE_COLORS['lodging']};
+          border:2px solid #fff;border-radius:7px 7px 0 0;
+          position: relative; box-shadow:0 1px 4px rgba(0,0,0,0.3);
+        ">
+          <div style="
+            position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);
+            width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid ${TYPE_COLORS['lodging']};
+          "></div>
+        </div>`;
+            return L.divIcon({ html, className: '', iconSize: [16, 28], iconAnchor: [8, 24], popupAnchor: [0, -20] });
+        }
+
+        // Layers
+        const lodgingLayer = L.layerGroup().addTo(map);
+        const dayLayers = {}; // key -> { group }
+
+        // Lodging markers
+        lodging.forEach(l => {
+            L.marker([l.lat, l.lon], { icon: lodgingIcon() })
+                .bindPopup(`<strong>${l.name}</strong><br/><small>Type: Lodging</small>`)
+                .addTo(lodgingLayer);
+        });
+
+        // Build day layers
+        function buildDayLayer(day) {
+            const group = L.layerGroup();
+            const latlngs = [];
+            day.stops.sort((a, b) => a.order - b.order).forEach((stop, index) => {
+                const offset = index * 0.0001; // Slight offset to prevent overlap
+                const adjustedLat = stop.lat + offset;
+                const adjustedLon = stop.lon + offset;
+                latlngs.push([adjustedLat, adjustedLon]);
+                const marker = L.marker([adjustedLat, adjustedLon], { icon: numberedIcon(stop.order, stop.type) })
+                    .addTo(group);
+                marker.bindTooltip(`<strong>${day.label}</strong><br/>#${stop.order} — ${stop.name}<br/><small>Type: ${stop.type}</small>`, {
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -10]
+                });
+            });
+            L.polyline(latlngs, { color: "#111", weight: 3, opacity: 0.6, dashArray: "6,6" }).addTo(group);
+            return { group };
+        }
+        days.forEach(d => { dayLayers[d.key] = buildDayLayer(d); });
+
+        // Tabs + Dropdown
+        const tabsEl = document.getElementById('tabs');
+        const dayInfoEl = document.getElementById('dayInfo');
+        let activeKey = days[0].key;
+
+        function populateControls() {
+            tabsEl.innerHTML = '';
+            days.forEach(d => {
+                const btn = document.createElement('button');
+                btn.className = 'tab' + (d.key === activeKey ? ' active' : '');
+                btn.textContent = d.label;
+                btn.onclick = () => switchDay(d.key);
+                tabsEl.appendChild(btn);
+            });
+            tabsEl.style.display = days.length > 0 ? 'flex' : 'none';
+        }
+
+        function switchDay(key) {
+            // Remove any visible day layer
+            Object.values(dayLayers).forEach(dl => map.removeLayer(dl.group));
+            activeKey = key;
+
+            // Update tab highlighting
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach((tab, index) => {
+                if (days[index].key === key) {
+                    tab.classList.add('active');
+                }
+            });
+
+            // Add selected day layer
+            const dl = dayLayers[key];
+            dl.group.addTo(map);
+
+            // Fit bounds to selected day + lodging
+            const bounds = L.featureGroup([...lodgingLayer.getLayers(), ...dl.group.getLayers()]).getBounds().pad(0.1);
+            if (bounds.isValid()) map.fitBounds(bounds);
+
+            // Update info
+            const day = days.find(d => d.key === key);
+            const pills = day.stops
+                .sort((a, b) => a.order - b.order)
+                .map(s => `<span class="stop-pill"><span class="badge">${s.order}</span>${s.name}</span>`)
+                .join(' ');
+            dayInfoEl.innerHTML = `<strong>${day.label}</strong> — Stops in order: ${pills}`;
+        }
+
+        // Initialize
+        populateControls();
+        switchDay(activeKey);
+
+        // If the top bars ever overlap, you can tweak these heights:
+        // document.documentElement.style.setProperty('--header-h', '120px');
+        // document.documentElement.style.setProperty('--tabs-h', '60px');
+    </script>
+</body>
+
+</html>
